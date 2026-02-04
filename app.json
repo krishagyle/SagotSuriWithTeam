@@ -1,11 +1,41 @@
 {
   "expo": {
+    "name": "SagotSuri",
+    "slug": "sagotsuri",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.sagotsuri"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourname.sagotsuri",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
     "plugins": [
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow $(learningRN) to save exam papers.",
-          "savePhotosPermission": "Allow $(learningRN) to save exam papers to your photo library.",
+          "photosPermission": "Allow SagotSuri to save exam papers.",
+          "savePhotosPermission": "Allow SagotSuri to save exam papers to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
       ]
