@@ -1,7 +1,14 @@
 {
   "expo": {
-    "name": "learningRN",
-    "slug": "learningRN",
-    "version": "1.0.0"
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(learningRN) to save exam papers.",
+          "savePhotosPermission": "Allow $(learningRN) to save exam papers to your photo library.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
   }
 }
