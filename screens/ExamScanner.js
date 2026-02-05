@@ -8,6 +8,8 @@ import {
     Alert,
     ActivityIndicator,
     Modal,
+    TextInput,
+    ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -21,7 +23,7 @@ import { documentDirectory, copyAsync } from 'expo-file-system/legacy';
  * 
  * Allows users to scan bubble sheet answer papers using camera or photo gallery.
  */
-export default function ExamScanner({ answerKey, onScanComplete, onImageSaved }) {
+export default function ExamScanner({ answerKey, onScanComplete, onImageSaved, folders, onCreateFolder }) {
     // --- STATE MANAGEMENT ---
     const [showCamera, setShowCamera] = useState(false);
     const [facing, setFacing] = useState('back');
@@ -31,6 +33,11 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved })
     const [capturedImage, setCapturedImage] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cameraRef, setCameraRef] = useState(null);
+    
+    // Folder selection modal states
+    const [showFolderModal, setShowFolderModal] = useState(false);
+    const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+    const [newFolderName, setNewFolderName] = useState('');
 
     // --- HANDLERS ---
 
@@ -109,8 +116,33 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved })
         setCapturedImage(null);
     };
 
-    const handleSaveImage = async () => {
-        console.log('💾 Save button pressed');
+    const handleSaveButtonPress = () => {
+        // Show folder selection modal
+        setShowFolderModal(true);
+    };
+
+    const handleCreateNewFolder = () => {
+        if (!newFolderName.trim()) {
+            Alert.alert('Error', 'Please enter a folder name');
+            return;
+        }
+
+        // Check if folder already exists
+        if (folders.some(f => f.name.toLowerCase() === newFolderName.trim().toLowerCase())) {
+            Alert.alert('Error', 'A folder with this name already exists');
+            return;
+        }
+
+        // Create new folder
+        onCreateFolder(newFolderName.trim());
+        setNewFolderName('');
+        setShowNewFolderInput(false);
+        
+        Alert.alert('Success', `Folder "${newFolderName.trim()}" created!`);
+    };
+
+    const handleSelectFolder = async (folderId) => {
+        console.log('💾 Saving to folder:', folderId);
         console.log('📍 Captured image URI:', capturedImage);
         
         if (!capturedImage) {
@@ -119,6 +151,7 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved })
         }
 
         setIsSaving(true);
+        setShowFolderModal(false);
 
         try {
             // Generate filename
@@ -152,11 +185,12 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved })
 
             setIsSaving(false);
 
-            // Create image data object
+            // Create image data object with folder info
             const imageData = {
                 uri: fileUri,
                 filename: filename,
                 timestamp: new Date().toISOString(),
+                folderId: folderId,
             };
             
             console.log('📦 Image data prepared:', imageData);
@@ -171,9 +205,10 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved })
             }
 
             // Show success message AFTER saving
+            const folderName = folders.find(f => f.id === folderId)?.name || 'Unknown';
             Alert.alert(
                 'Image Saved Successfully! ✅',
-                'The exam paper is now available in the CSV File tab.',
+                `The exam paper has been saved to "${folderName}" folder.\n\nYou can view it in the CSV File tab.`,
                 [
                     {
                         text: 'OK',
@@ -204,47 +239,128 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved })
     // Image Preview Screen
     if (capturedImage) {
         return (
-            <View style={styles.container}>
-                <View style={styles.previewContainer}>
-                    <Image 
-                        source={{ uri: capturedImage }} 
-                        style={styles.previewImage}
-                        onError={(error) => {
-                            console.log('❌ Preview image load error:', error.nativeEvent.error);
-                        }}
-                        onLoad={() => {
-                            console.log('✅ Preview image loaded successfully');
-                        }}
-                    />
+            <>
+                <View style={styles.container}>
+                    <View style={styles.previewContainer}>
+                        <Image 
+                            source={{ uri: capturedImage }} 
+                            style={styles.previewImage}
+                            onError={(error) => {
+                                console.log('❌ Preview image load error:', error.nativeEvent.error);
+                            }}
+                            onLoad={() => {
+                                console.log('✅ Preview image loaded successfully');
+                            }}
+                        />
 
-                    {isSaving && (
-                        <View style={styles.processingOverlay}>
-                            <ActivityIndicator size="large" color="#fff" />
-                            <Text style={styles.processingText}>Saving image...</Text>
+                        {isSaving && (
+                            <View style={styles.processingOverlay}>
+                                <ActivityIndicator size="large" color="#fff" />
+                                <Text style={styles.processingText}>Saving image...</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.previewActions}>
+                        <TouchableOpacity
+                            style={styles.secondaryButton}
+                            onPress={handleRetake}
+                            disabled={isSaving}
+                        >
+                            <Ionicons name="camera-outline" size={20} color="#0038A8" />
+                            <Text style={styles.secondaryButtonText}>Retake</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
+                            onPress={handleSaveButtonPress}
+                            disabled={isSaving}
+                        >
+                            <Ionicons name="save-outline" size={20} color="#fff" />
+                            <Text style={styles.primaryButtonText}>Save</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Folder Selection Modal */}
+                <Modal
+                    visible={showFolderModal}
+                    animationType="slide"
+                    transparent={true}
+                >
+                    <View style={styles.folderModalOverlay}>
+                        <View style={styles.folderModalContainer}>
+                            {/* Header */}
+                            <View style={styles.folderModalHeader}>
+                                <Text style={styles.folderModalTitle}>Save to Folder</Text>
+                                <TouchableOpacity onPress={() => setShowFolderModal(false)}>
+                                    <Ionicons name="close" size={24} color="#64748B" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Folder List */}
+                            <ScrollView style={styles.folderList} showsVerticalScrollIndicator={false}>
+                                {folders.map((folder) => (
+                                    <TouchableOpacity
+                                        key={folder.id}
+                                        style={styles.folderItem}
+                                        onPress={() => handleSelectFolder(folder.id)}
+                                    >
+                                        <View style={styles.folderIconContainer}>
+                                            <Ionicons name="folder" size={24} color="#0038A8" />
+                                        </View>
+                                        <View style={styles.folderInfo}>
+                                            <Text style={styles.folderName}>{folder.name}</Text>
+                                            <Text style={styles.folderCount}>
+                                                {folder.imageCount || 0} {folder.imageCount === 1 ? 'image' : 'images'}
+                                            </Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+
+                            {/* New Folder Section */}
+                            {!showNewFolderInput ? (
+                                <TouchableOpacity
+                                    style={styles.newFolderButton}
+                                    onPress={() => setShowNewFolderInput(true)}
+                                >
+                                    <Ionicons name="add-circle" size={20} color="#0038A8" />
+                                    <Text style={styles.newFolderButtonText}>Create New Folder</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={styles.newFolderInputContainer}>
+                                    <TextInput
+                                        style={styles.newFolderInput}
+                                        placeholder="Enter folder name"
+                                        value={newFolderName}
+                                        onChangeText={setNewFolderName}
+                                        autoFocus
+                                    />
+                                    <View style={styles.newFolderActions}>
+                                        <TouchableOpacity
+                                            style={styles.cancelButton}
+                                            onPress={() => {
+                                                setShowNewFolderInput(false);
+                                                setNewFolderName('');
+                                            }}
+                                        >
+                                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.createButton}
+                                            onPress={handleCreateNewFolder}
+                                        >
+                                            <Text style={styles.createButtonText}>Create</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
                         </View>
-                    )}
-                </View>
-
-                <View style={styles.previewActions}>
-                    <TouchableOpacity
-                        style={styles.secondaryButton}
-                        onPress={handleRetake}
-                        disabled={isSaving}
-                    >
-                        <Ionicons name="camera-outline" size={20} color="#0038A8" />
-                        <Text style={styles.secondaryButtonText}>Retake</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
-                        onPress={handleSaveImage}
-                        disabled={isSaving}
-                    >
-                        <Ionicons name="save-outline" size={20} color="#fff" />
-                        <Text style={styles.primaryButtonText}>Save</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+                    </View>
+                </Modal>
+            </>
         );
     }
 
@@ -632,5 +748,131 @@ const styles = StyleSheet.create({
     },
     buttonDisabled: {
         opacity: 0.5,
+    },
+
+    // Folder Selection Modal Styles
+    folderModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    folderModalContainer: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingTop: 20,
+        paddingBottom: 40,
+        maxHeight: '80%',
+    },
+    folderModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0',
+    },
+    folderModalTitle: {
+        fontSize: 20,
+        fontFamily: 'Inter_700Bold',
+        color: '#1E293B',
+    },
+    folderList: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        maxHeight: 300,
+    },
+    folderItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        marginBottom: 12,
+    },
+    folderIconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#E0EAFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    folderInfo: {
+        flex: 1,
+    },
+    folderName: {
+        fontSize: 16,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#1E293B',
+        marginBottom: 4,
+    },
+    folderCount: {
+        fontSize: 13,
+        fontFamily: 'Inter_400Regular',
+        color: '#64748B',
+    },
+    newFolderButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        marginHorizontal: 20,
+        marginTop: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#0038A8',
+        borderStyle: 'dashed',
+        gap: 8,
+    },
+    newFolderButtonText: {
+        fontSize: 16,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#0038A8',
+    },
+    newFolderInputContainer: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+    },
+    newFolderInput: {
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        fontSize: 16,
+        fontFamily: 'Inter_400Regular',
+        marginBottom: 12,
+    },
+    newFolderActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 10,
+        backgroundColor: '#F1F5F9',
+        alignItems: 'center',
+    },
+    cancelButtonText: {
+        fontSize: 15,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#64748B',
+    },
+    createButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 10,
+        backgroundColor: '#0038A8',
+        alignItems: 'center',
+    },
+    createButtonText: {
+        fontSize: 15,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#fff',
     },
 });

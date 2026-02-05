@@ -17,24 +17,34 @@ import { documentDirectory, writeAsStringAsync, deleteAsync } from 'expo-file-sy
 /**
  * CSVFileManager Component
  * 
- * Displays saved exam paper images and converts them to CSV files.
- * Features:
- * - Display list of saved exam images
- * - Preview images
- * - Convert images to CSV (simulated bubble detection)
- * - Download/Share CSV files
- * - Delete saved images
+ * Displays saved exam paper images organized by folders and converts them to CSV files.
  */
-export default function CSVFileManager({ savedImages, onDeleteImage }) {
+export default function CSVFileManager({ savedImages, onDeleteImage, folders }) {
     // --- STATE MANAGEMENT ---
     const [processingImage, setProcessingImage] = useState(null);
     const [generatedCSVs, setGeneratedCSVs] = useState({});
+    const [selectedFolder, setSelectedFolder] = useState(null);
+
+    useEffect(() => {
+        console.log('CSVFileManager - savedImages updated:', savedImages);
+        console.log('CSVFileManager - Number of images:', savedImages?.length);
+        console.log('CSVFileManager - Folders:', folders);
+    }, [savedImages, folders]);
+
+    // Filter images by selected folder
+    const getFilteredImages = () => {
+        if (!selectedFolder) {
+            return savedImages || [];
+        }
+        return (savedImages || []).filter(img => img.folderId === selectedFolder);
+    };
+
+    const filteredImages = getFilteredImages();
 
     // --- HANDLERS ---
 
     /**
      * Convert exam paper image to CSV file
-     * In production, this would use actual OCR/image processing
      */
     const handleConvertToCSV = async (imageData) => {
         setProcessingImage(imageData.uri);
@@ -43,7 +53,6 @@ export default function CSVFileManager({ savedImages, onDeleteImage }) {
         setTimeout(async () => {
             try {
                 // SIMULATION: Detect bubbles from image
-                // In production, use OpenCV/Tesseract for actual detection
                 const detectedAnswers = simulateBubbleDetection(50);
 
                 // Generate CSV content
@@ -82,11 +91,6 @@ export default function CSVFileManager({ savedImages, onDeleteImage }) {
         }, 2000);
     };
 
-        useEffect(() => {
-        console.log('CSVFileManager - savedImages updated:', savedImages);
-        console.log('CSVFileManager - Number of images:', savedImages?.length);
-    }, [savedImages]);
-
     /**
      * Share/Download CSV file
      */
@@ -107,45 +111,45 @@ export default function CSVFileManager({ savedImages, onDeleteImage }) {
         }
     };
 
-/**
- * Delete saved image
- */
-const handleDeleteImage = (imageData) => {
-    Alert.alert(
-        'Delete Image',
-        'Are you sure you want to delete this exam paper?',
-        [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {  // ← Add async here
-                    try {
-                        // Remove associated CSV if exists
-                        if (generatedCSVs[imageData.uri]) {
-                            const { csvUri } = generatedCSVs[imageData.uri];
-                            await deleteAsync(csvUri, { idempotent: true });  // ← Add await here
-                            setGeneratedCSVs(prev => {
-                                const newCSVs = { ...prev };
-                                delete newCSVs[imageData.uri];
-                                return newCSVs;
-                            });
-                            console.log('✅ CSV file deleted');
+    /**
+     * Delete saved image
+     */
+    const handleDeleteImage = (imageData) => {
+        Alert.alert(
+            'Delete Image',
+            'Are you sure you want to delete this exam paper?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Remove associated CSV if exists
+                            if (generatedCSVs[imageData.uri]) {
+                                const { csvUri } = generatedCSVs[imageData.uri];
+                                await deleteAsync(csvUri, { idempotent: true });
+                                setGeneratedCSVs(prev => {
+                                    const newCSVs = { ...prev };
+                                    delete newCSVs[imageData.uri];
+                                    return newCSVs;
+                                });
+                                console.log('✅ CSV file deleted');
+                            }
+                            
+                            // Call parent handler to delete the image file
+                            if (onDeleteImage) {
+                                onDeleteImage(imageData);
+                            }
+                        } catch (error) {
+                            console.error('❌ Error deleting files:', error);
+                            Alert.alert('Error', 'Failed to delete some files.');
                         }
-                        
-                        // Call parent handler to delete the image file
-                        if (onDeleteImage) {
-                            onDeleteImage(imageData);
-                        }
-                    } catch (error) {
-                        console.error('❌ Error deleting files:', error);
-                        Alert.alert('Error', 'Failed to delete some files.');
-                    }
+                    },
                 },
-            },
-        ]
-    );
-};
+            ]
+        );
+    };
 
     // --- RENDER ---
 
@@ -162,14 +166,14 @@ const handleDeleteImage = (imageData) => {
         );
     }
 
-    // List of saved images
+    // Main view with folders
     return (
         <View style={styles.container}>
             {/* Header Stats */}
             <View style={styles.statsCard}>
                 <View style={styles.statItem}>
                     <Text style={styles.statNumber}>{savedImages.length}</Text>
-                    <Text style={styles.statLabel}>Saved Images</Text>
+                    <Text style={styles.statLabel}>Total Images</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
@@ -180,86 +184,139 @@ const handleDeleteImage = (imageData) => {
                 </View>
             </View>
 
+            {/* Folder Tabs */}
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.folderTabsContainer}
+                contentContainerStyle={styles.folderTabsContent}
+            >
+                <TouchableOpacity
+                    style={[styles.folderTab, !selectedFolder && styles.folderTabActive]}
+                    onPress={() => setSelectedFolder(null)}
+                >
+                    <Ionicons 
+                        name="albums" 
+                        size={18} 
+                        color={!selectedFolder ? '#0038A8' : '#64748B'} 
+                    />
+                    <Text style={[
+                        styles.folderTabText, 
+                        !selectedFolder && styles.folderTabTextActive
+                    ]}>
+                        All ({savedImages.length})
+                    </Text>
+                </TouchableOpacity>
+
+                {folders.map((folder) => {
+                    const count = savedImages.filter(img => img.folderId === folder.id).length;
+                    const isActive = selectedFolder === folder.id;
+                    
+                    return (
+                        <TouchableOpacity
+                            key={folder.id}
+                            style={[styles.folderTab, isActive && styles.folderTabActive]}
+                            onPress={() => setSelectedFolder(folder.id)}
+                        >
+                            <Ionicons 
+                                name="folder" 
+                                size={18} 
+                                color={isActive ? '#0038A8' : '#64748B'} 
+                            />
+                            <Text style={[
+                                styles.folderTabText, 
+                                isActive && styles.folderTabTextActive
+                            ]}>
+                                {folder.name} ({count})
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
 
             {/* Image List */}
-            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                <View style={styles.imageGrid}>
-                    {savedImages.map((imageData, index) => {
-                        const csvInfo = generatedCSVs[imageData.uri];
-                        const isProcessing = processingImage === imageData.uri;
-
-                        return (
-                            <View key={imageData.uri} style={styles.imageCard}>
-                                {/* Image Preview */}
-                                <View style={styles.imagePreview}>
-                                    <Image
-                                        source={{ uri: imageData.uri }}
-                                        style={styles.thumbnailImage}
-                                    />
-                                    {isProcessing && (
-                                        <View style={styles.processingOverlay}>
-                                            <ActivityIndicator size="small" color="#fff" />
-                                        </View>
-                                    )}
-                                </View>
-
-                                {/* Image Info */}
-                                <View style={styles.imageInfo}>
-                                    <Text style={styles.imageFilename} numberOfLines={1}>
-                                        {imageData.filename}
-                                    </Text>
-                                    <Text style={styles.imageDate}>
-                                        {new Date(imageData.timestamp).toLocaleDateString()}
-                                    </Text>
-                                </View>
-
-                                {/* Action Buttons */}
-                                <View style={styles.imageActions}>
-                                    {!csvInfo && !isProcessing && (
-                                        <TouchableOpacity
-                                            style={styles.convertButton}
-                                            onPress={() => handleConvertToCSV(imageData)}
-                                        >
-                                            <Ionicons name="document-text" size={16} color="#fff" />
-                                            <Text style={styles.convertButtonText}>Convert to CSV</Text>
-                                        </TouchableOpacity>
-                                    )}
-
-                                    {csvInfo && (
-                                        <TouchableOpacity
-                                            style={styles.downloadButton}
-                                            onPress={() => handleShareCSV(csvInfo)}
-                                        >
-                                            <Ionicons name="download-outline" size={16} color="#0038A8" />
-                                            <Text style={styles.downloadButtonText}>Download CSV</Text>
-                                        </TouchableOpacity>
-                                    )}
-
-                                    <TouchableOpacity
-                                        style={styles.deleteButton}
-                                        onPress={() => handleDeleteImage(imageData)}
-                                        disabled={isProcessing}
-                                    >
-                                        <Ionicons name="trash-outline" size={16} color="#CE1126" />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        );
-                    })}
+            {filteredImages.length === 0 ? (
+                <View style={styles.emptyFolderContainer}>
+                    <Ionicons name="folder-open-outline" size={60} color="#94A3B8" />
+                    <Text style={styles.emptyFolderText}>
+                        No images in this folder
+                    </Text>
                 </View>
-            </ScrollView>
+            ) : (
+                <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+                    <View style={styles.imageGrid}>
+                        {filteredImages.map((imageData, index) => {
+                            const csvInfo = generatedCSVs[imageData.uri];
+                            const isProcessing = processingImage === imageData.uri;
+
+                            return (
+                                <View key={imageData.uri} style={styles.imageCard}>
+                                    {/* Image Preview */}
+                                    <View style={styles.imagePreview}>
+                                        <Image
+                                            source={{ uri: imageData.uri }}
+                                            style={styles.thumbnailImage}
+                                        />
+                                        {isProcessing && (
+                                            <View style={styles.processingOverlay}>
+                                                <ActivityIndicator size="small" color="#fff" />
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {/* Image Info */}
+                                    <View style={styles.imageInfo}>
+                                        <Text style={styles.imageFilename} numberOfLines={1}>
+                                            {imageData.filename}
+                                        </Text>
+                                        <Text style={styles.imageDate}>
+                                            {new Date(imageData.timestamp).toLocaleDateString()}
+                                        </Text>
+                                    </View>
+
+                                    {/* Action Buttons */}
+                                    <View style={styles.imageActions}>
+                                        {!csvInfo && !isProcessing && (
+                                            <TouchableOpacity
+                                                style={styles.convertButton}
+                                                onPress={() => handleConvertToCSV(imageData)}
+                                            >
+                                                <Ionicons name="document-text" size={16} color="#fff" />
+                                                <Text style={styles.convertButtonText}>Convert to CSV</Text>
+                                            </TouchableOpacity>
+                                        )}
+
+                                        {csvInfo && (
+                                            <TouchableOpacity
+                                                style={styles.downloadButton}
+                                                onPress={() => handleShareCSV(csvInfo)}
+                                            >
+                                                <Ionicons name="download-outline" size={16} color="#0038A8" />
+                                                <Text style={styles.downloadButtonText}>Download CSV</Text>
+                                            </TouchableOpacity>
+                                        )}
+
+                                        <TouchableOpacity
+                                            style={styles.deleteButton}
+                                            onPress={() => handleDeleteImage(imageData)}
+                                            disabled={isProcessing}
+                                        >
+                                            <Ionicons name="trash-outline" size={16} color="#CE1126" />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </ScrollView>
+            )}
         </View>
     );
 }
 
 // --- HELPER FUNCTIONS ---
 
-/**
- * Simulate bubble detection from image
- * In production, replace with actual OCR (OpenCV/Tesseract)
- */
 function simulateBubbleDetection(totalQuestions) {
-    // Real shaded bubbles from exam paper (50 questions)
     const realShadedBubbles = {
         1: 'B', 2: 'A', 3: 'C', 4: 'D', 5: 'B',
         6: 'C', 7: 'C', 8: 'B', 9: 'C', 10: 'D',
@@ -281,27 +338,20 @@ function simulateBubbleDetection(totalQuestions) {
     return answers;
 }
 
-/**
- * Generate CSV content from detected answers - HORIZONTAL FORMAT
- */
 function generateCSVContent(answers, filename) {
-    // Get all question numbers and sort them numerically
     const questionNumbers = Object.keys(answers).sort((a, b) => parseInt(a) - parseInt(b));
     
-    // Build the header row (Question Number, 1, 2, 3, ...)
     let headerRow = 'Question Number';
     for (let i = 0; i < questionNumbers.length; i++) {
         headerRow += ',' + questionNumbers[i];
     }
     
-    // Build the answer row (Answer, B, A, C, ...)
     let answerRow = 'Answer';
     for (let i = 0; i < questionNumbers.length; i++) {
         const questionNum = questionNumbers[i];
         answerRow += ',' + answers[questionNum];
     }
     
-    // Combine with newline
     return headerRow + '\n' + answerRow + '\n';
 }
 
@@ -331,6 +381,18 @@ const styles = StyleSheet.create({
         fontFamily: 'Inter_400Regular',
         color: '#64748B',
         textAlign: 'center',
+    },
+    emptyFolderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 60,
+    },
+    emptyFolderText: {
+        fontSize: 16,
+        fontFamily: 'Inter_500Medium',
+        color: '#94A3B8',
+        marginTop: 16,
     },
 
     // Stats Card
@@ -365,6 +427,38 @@ const styles = StyleSheet.create({
         width: 1,
         backgroundColor: '#E2E8F0',
         marginHorizontal: 16,
+    },
+
+    // Folder Tabs
+    folderTabsContainer: {
+        marginBottom: 16,
+        maxHeight: 50,
+    },
+    folderTabsContent: {
+        paddingHorizontal: 4,
+        gap: 8,
+    },
+    folderTab: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
+        gap: 6,
+        marginRight: 8,
+    },
+    folderTabActive: {
+        backgroundColor: '#E0EAFF',
+    },
+    folderTabText: {
+        fontSize: 14,
+        fontFamily: 'Inter_500Medium',
+        color: '#64748B',
+    },
+    folderTabTextActive: {
+        color: '#0038A8',
+        fontFamily: 'Inter_600SemiBold',
     },
 
     // Image Grid

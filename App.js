@@ -32,8 +32,12 @@ export default function App() {
     // --- STATE MANAGEMENT ---
     const [activeTab, setActiveTab] = useState('scan');
     const [savedImages, setSavedImages] = useState([]);
+    const [folders, setFolders] = useState([
+        { id: 'default', name: 'General', imageCount: 0 },
+    ]);
     const [scanResult, setScanResult] = useState(null);
     const [imagesLoaded, setImagesLoaded] = useState(false);
+    const [foldersLoaded, setFoldersLoaded] = useState(false);
     const [appIsReady, setAppIsReady] = useState(false);
 
     // --- FONT LOADING ---
@@ -48,8 +52,11 @@ export default function App() {
     useEffect(() => {
         async function prepare() {
             try {
-                // Load saved images
-                await loadSavedImages();
+                // Load saved images and folders
+                await Promise.all([
+                    loadSavedImages(),
+                    loadFolders(),
+                ]);
                 
                 // Wait for fonts
                 while (!fontsLoaded) {
@@ -94,11 +101,37 @@ export default function App() {
         }
     };
 
+    const loadFolders = async () => {
+        try {
+            const savedFolders = await AsyncStorage.getItem('folders');
+            if (savedFolders) {
+                const parsedFolders = JSON.parse(savedFolders);
+                console.log('✅ Loaded folders from storage:', parsedFolders);
+                setFolders(parsedFolders);
+            } else {
+                console.log('ℹ️ No folders found, using default');
+            }
+        } catch (error) {
+            console.error('❌ Error loading folders:', error);
+        } finally {
+            setFoldersLoaded(true);
+        }
+    };
+
+    // Save images when they change
     useEffect(() => {
         if (imagesLoaded) {
             saveSavedImages();
+            updateFolderCounts();
         }
     }, [savedImages, imagesLoaded]);
+
+    // Save folders when they change
+    useEffect(() => {
+        if (foldersLoaded) {
+            saveFolders();
+        }
+    }, [folders, foldersLoaded]);
 
     const saveSavedImages = async () => {
         try {
@@ -107,6 +140,25 @@ export default function App() {
         } catch (error) {
             console.error('❌ Error saving images to storage:', error);
         }
+    };
+
+    const saveFolders = async () => {
+        try {
+            await AsyncStorage.setItem('folders', JSON.stringify(folders));
+            console.log('💾 Saved folders to AsyncStorage. Count:', folders.length);
+        } catch (error) {
+            console.error('❌ Error saving folders to storage:', error);
+        }
+    };
+
+    // Update folder image counts
+    const updateFolderCounts = () => {
+        setFolders(prevFolders => 
+            prevFolders.map(folder => ({
+                ...folder,
+                imageCount: savedImages.filter(img => img.folderId === folder.id).length
+            }))
+        );
     };
 
     // --- HANDLERS ---
@@ -135,6 +187,17 @@ export default function App() {
         } catch (error) {
             console.error('❌ Error deleting image:', error);
         }
+    };
+
+    const handleCreateFolder = (folderName) => {
+        const newFolder = {
+            id: `folder_${Date.now()}`,
+            name: folderName,
+            imageCount: 0,
+        };
+        
+        setFolders(prev => [...prev, newFolder]);
+        console.log('📁 New folder created:', newFolder);
     };
 
     const handleScanComplete = (result) => {
@@ -204,12 +267,15 @@ export default function App() {
                         <ExamScanner
                             onScanComplete={handleScanComplete}
                             onImageSaved={handleImageSaved}
+                            folders={folders}
+                            onCreateFolder={handleCreateFolder}
                         />
                     )}
                     {activeTab === 'csv-file' && (
                         <CSVFileManager
                             savedImages={savedImages}
                             onDeleteImage={handleDeleteImage}
+                            folders={folders}
                         />
                     )}
                     {activeTab === 'results' && (
