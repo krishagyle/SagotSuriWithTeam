@@ -1,4 +1,4 @@
-package com.sagotsuri
+package com.yourname.sagotsuri
 
 import android.app.Application
 import android.content.res.Configuration
