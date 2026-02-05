@@ -17,7 +17,7 @@ import { documentDirectory, writeAsStringAsync, deleteAsync } from 'expo-file-sy
 /**
  * CSVFileManager Component
  * 
- * Displays saved exam paper images organized by folders and converts them to CSV files.
+ * File explorer-style interface for managing exam papers organized by folders.
  */
 export default function CSVFileManager({ savedImages, onDeleteImage, folders }) {
     // --- STATE MANAGEMENT ---
@@ -31,17 +31,23 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
         console.log('CSVFileManager - Folders:', folders);
     }, [savedImages, folders]);
 
-    // Filter images by selected folder
-    const getFilteredImages = () => {
-        if (!selectedFolder) {
-            return savedImages || [];
-        }
+    // Get images for selected folder
+    const getFolderImages = () => {
+        if (!selectedFolder) return [];
         return (savedImages || []).filter(img => img.folderId === selectedFolder);
     };
 
-    const filteredImages = getFilteredImages();
+    const folderImages = getFolderImages();
 
     // --- HANDLERS ---
+
+    const handleFolderClick = (folderId) => {
+        setSelectedFolder(folderId);
+    };
+
+    const handleBackToFolders = () => {
+        setSelectedFolder(null);
+    };
 
     /**
      * Convert exam paper image to CSV file
@@ -153,11 +159,11 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
 
     // --- RENDER ---
 
-    // Empty state
+    // Empty state - no images at all
     if (!savedImages || savedImages.length === 0) {
         return (
             <View style={styles.emptyContainer}>
-                <Ionicons name="document-outline" size={80} color="#94A3B8" />
+                <Ionicons name="folder-open-outline" size={80} color="#94A3B8" />
                 <Text style={styles.emptyTitle}>No Saved Exam Papers</Text>
                 <Text style={styles.emptyText}>
                     Capture exam papers using the Scan tab to convert them to CSV files
@@ -166,86 +172,116 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
         );
     }
 
-    // Main view with folders
+    // FOLDER VIEW - Show list of folders
+    if (!selectedFolder) {
+        return (
+            <View style={styles.container}>
+                {/* Header */}
+                <View style={styles.explorerHeader}>
+                    <Ionicons name="folder-open" size={24} color="#0038A8" />
+                    <Text style={styles.explorerTitle}>My Folders</Text>
+                </View>
+
+                {/* Stats Card */}
+                <View style={styles.statsCard}>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statNumber}>{folders.length}</Text>
+                        <Text style={styles.statLabel}>Folders</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statNumber}>{savedImages.length}</Text>
+                        <Text style={styles.statLabel}>Total Images</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statNumber}>
+                            {Object.keys(generatedCSVs).length}
+                        </Text>
+                        <Text style={styles.statLabel}>CSV Files</Text>
+                    </View>
+                </View>
+
+                {/* Folder List */}
+                <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+                    <View style={styles.folderGrid}>
+                        {folders.map((folder) => {
+                            const folderImageCount = savedImages.filter(
+                                img => img.folderId === folder.id
+                            ).length;
+
+                            return (
+                                <TouchableOpacity
+                                    key={folder.id}
+                                    style={styles.folderCard}
+                                    onPress={() => handleFolderClick(folder.id)}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={styles.folderIconContainer}>
+                                        <Ionicons name="folder" size={48} color="#0038A8" />
+                                        {folderImageCount > 0 && (
+                                            <View style={styles.folderBadge}>
+                                                <Text style={styles.folderBadgeText}>
+                                                    {folderImageCount}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <Text style={styles.folderName} numberOfLines={1}>
+                                        {folder.name}
+                                    </Text>
+                                    <Text style={styles.folderInfo}>
+                                        {folderImageCount} {folderImageCount === 1 ? 'item' : 'items'}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    }
+
+    // FILE VIEW - Show images in selected folder
+    const currentFolder = folders.find(f => f.id === selectedFolder);
+    
     return (
         <View style={styles.container}>
-            {/* Header Stats */}
-            <View style={styles.statsCard}>
-                <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{savedImages.length}</Text>
-                    <Text style={styles.statLabel}>Total Images</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>
-                        {Object.keys(generatedCSVs).length}
-                    </Text>
-                    <Text style={styles.statLabel}>CSV Files</Text>
+            {/* Breadcrumb Header */}
+            <View style={styles.breadcrumbHeader}>
+                <TouchableOpacity 
+                    style={styles.backButton}
+                    onPress={handleBackToFolders}
+                >
+                    <Ionicons name="arrow-back" size={24} color="#0038A8" />
+                </TouchableOpacity>
+                <View style={styles.breadcrumbContent}>
+                    <Ionicons name="folder" size={20} color="#64748B" />
+                    <Text style={styles.breadcrumbText}>{currentFolder?.name || 'Folder'}</Text>
+                    <Text style={styles.breadcrumbCount}>({folderImages.length})</Text>
                 </View>
             </View>
 
-            {/* Folder Tabs */}
-            <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.folderTabsContainer}
-                contentContainerStyle={styles.folderTabsContent}
-            >
-                <TouchableOpacity
-                    style={[styles.folderTab, !selectedFolder && styles.folderTabActive]}
-                    onPress={() => setSelectedFolder(null)}
-                >
-                    <Ionicons 
-                        name="albums" 
-                        size={18} 
-                        color={!selectedFolder ? '#0038A8' : '#64748B'} 
-                    />
-                    <Text style={[
-                        styles.folderTabText, 
-                        !selectedFolder && styles.folderTabTextActive
-                    ]}>
-                        All ({savedImages.length})
-                    </Text>
-                </TouchableOpacity>
-
-                {folders.map((folder) => {
-                    const count = savedImages.filter(img => img.folderId === folder.id).length;
-                    const isActive = selectedFolder === folder.id;
-                    
-                    return (
-                        <TouchableOpacity
-                            key={folder.id}
-                            style={[styles.folderTab, isActive && styles.folderTabActive]}
-                            onPress={() => setSelectedFolder(folder.id)}
-                        >
-                            <Ionicons 
-                                name="folder" 
-                                size={18} 
-                                color={isActive ? '#0038A8' : '#64748B'} 
-                            />
-                            <Text style={[
-                                styles.folderTabText, 
-                                isActive && styles.folderTabTextActive
-                            ]}>
-                                {folder.name} ({count})
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </ScrollView>
-
-            {/* Image List */}
-            {filteredImages.length === 0 ? (
+            {/* Empty folder state */}
+            {folderImages.length === 0 ? (
                 <View style={styles.emptyFolderContainer}>
-                    <Ionicons name="folder-open-outline" size={60} color="#94A3B8" />
+                    <Ionicons name="images-outline" size={80} color="#94A3B8" />
+                    <Text style={styles.emptyFolderTitle}>No Images in This Folder</Text>
                     <Text style={styles.emptyFolderText}>
-                        No images in this folder
+                        Scan or upload exam papers and save them to this folder
                     </Text>
+                    <TouchableOpacity 
+                        style={styles.emptyFolderButton}
+                        onPress={handleBackToFolders}
+                    >
+                        <Ionicons name="arrow-back" size={18} color="#0038A8" />
+                        <Text style={styles.emptyFolderButtonText}>Back to Folders</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
                     <View style={styles.imageGrid}>
-                        {filteredImages.map((imageData, index) => {
+                        {folderImages.map((imageData, index) => {
                             const csvInfo = generatedCSVs[imageData.uri];
                             const isProcessing = processingImage === imageData.uri;
 
@@ -362,6 +398,54 @@ const styles = StyleSheet.create({
         padding: 16,
     },
 
+    // Explorer Header
+    explorerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 16,
+        paddingHorizontal: 4,
+    },
+    explorerTitle: {
+        fontSize: 22,
+        fontFamily: 'Inter_700Bold',
+        color: '#1E293B',
+    },
+
+    // Breadcrumb Navigation
+    breadcrumbHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+        gap: 12,
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    breadcrumbContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    breadcrumbText: {
+        fontSize: 18,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#1E293B',
+    },
+    breadcrumbCount: {
+        fontSize: 16,
+        fontFamily: 'Inter_400Regular',
+        color: '#64748B',
+    },
+
     // Empty State
     emptyContainer: {
         flex: 1,
@@ -382,17 +466,43 @@ const styles = StyleSheet.create({
         color: '#64748B',
         textAlign: 'center',
     },
+
+    // Empty Folder State
     emptyFolderContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: 60,
+        padding: 32,
+    },
+    emptyFolderTitle: {
+        fontSize: 20,
+        fontFamily: 'Inter_700Bold',
+        color: '#1E293B',
+        marginTop: 20,
+        marginBottom: 8,
     },
     emptyFolderText: {
-        fontSize: 16,
-        fontFamily: 'Inter_500Medium',
-        color: '#94A3B8',
-        marginTop: 16,
+        fontSize: 15,
+        fontFamily: 'Inter_400Regular',
+        color: '#64748B',
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    emptyFolderButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        backgroundColor: '#F1F5F9',
+        borderWidth: 1,
+        borderColor: '#0038A8',
+    },
+    emptyFolderButtonText: {
+        fontSize: 15,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#0038A8',
     },
 
     // Stats Card
@@ -400,8 +510,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         backgroundColor: '#fff',
         borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
+        padding: 16,
+        marginBottom: 20,
         shadowColor: '#94A3B8',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -413,12 +523,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     statNumber: {
-        fontSize: 28,
+        fontSize: 24,
         fontFamily: 'Inter_700Bold',
         color: '#0038A8',
     },
     statLabel: {
-        fontSize: 12,
+        fontSize: 11,
         fontFamily: 'Inter_500Medium',
         color: '#64748B',
         marginTop: 4,
@@ -426,47 +536,69 @@ const styles = StyleSheet.create({
     statDivider: {
         width: 1,
         backgroundColor: '#E2E8F0',
-        marginHorizontal: 16,
+        marginHorizontal: 12,
     },
 
-    // Folder Tabs
-    folderTabsContainer: {
-        marginBottom: 16,
-        maxHeight: 50,
-    },
-    folderTabsContent: {
-        paddingHorizontal: 4,
-        gap: 8,
-    },
-    folderTab: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-        backgroundColor: '#F1F5F9',
-        gap: 6,
-        marginRight: 8,
-    },
-    folderTabActive: {
-        backgroundColor: '#E0EAFF',
-    },
-    folderTabText: {
-        fontSize: 14,
-        fontFamily: 'Inter_500Medium',
-        color: '#64748B',
-    },
-    folderTabTextActive: {
-        color: '#0038A8',
-        fontFamily: 'Inter_600SemiBold',
-    },
-
-    // Image Grid
+    // Folder Grid
     scrollView: {
         flex: 1,
     },
+    folderGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    folderCard: {
+        width: '47.5%',
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        alignItems: 'center',
+        shadowColor: '#94A3B8',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
+        marginBottom: 12,
+    },
+    folderIconContainer: {
+        position: 'relative',
+        marginBottom: 12,
+    },
+    folderBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: '#CE1126',
+        borderRadius: 12,
+        minWidth: 24,
+        height: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+    },
+    folderBadgeText: {
+        color: '#fff',
+        fontSize: 11,
+        fontFamily: 'Inter_700Bold',
+    },
+    folderName: {
+        fontSize: 15,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#1E293B',
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    folderInfo: {
+        fontSize: 12,
+        fontFamily: 'Inter_400Regular',
+        color: '#64748B',
+    },
+
+    // Image Grid
     imageGrid: {
         gap: 12,
+        paddingBottom: 20,
     },
 
     // Image Card
