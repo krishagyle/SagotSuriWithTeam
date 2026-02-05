@@ -1,6 +1,39 @@
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-  <item android:drawable="@color/splashscreen_background"/>
-  <item>
-    <bitmap android:gravity="center" android:src="@drawable/splashscreen_logo"/>
-  </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+  <!-- Background Circle -->
+  <path
+      android:pathData="M50,2 A48,48 0 1,1 49.999,2 Z"
+      android:fillColor="#0038A8" />
+  <!-- Paper Document -->
+  <path
+      android:pathData="M30,29 L66,29 A4,4 0 0,1 70,33 L70,71 A4,4 0 0,1 66,75 L34,75 A4,4 0 0,1 30,71 L30,33 A4,4 0 0,1 34,29 Z"
+      android:fillColor="#FFFFFF" />
+  <!-- Text Lines on Paper -->
+  <path
+      android:pathData="M36,32 L64,32 L64,35 L36,35 Z"
+      android:fillColor="#E5E7EB" />
+  <path
+      android:pathData="M36,40 L64,40 L64,43 L36,43 Z"
+      android:fillColor="#E5E7EB" />
+  <path
+      android:pathData="M36,48 L64,48 L64,51 L36,51 Z"
+      android:fillColor="#E5E7EB" />
+  <path
+      android:pathData="M36,56 L56,56 L56,59 L36,59 Z"
+      android:fillColor="#E5E7EB" />
+  <!-- Checkmark -->
+  <path
+      android:pathData="M45,65 L55,65 L75,35"
+      android:strokeColor="#CE1126"
+      android:strokeWidth="6"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round" />
+  <!-- Scan Line Effect -->
+  <path
+      android:pathData="M25,45 L75,45 L75,47 L25,47 Z"
+      android:fillColor="#CE1126"
+      android:fillAlpha="0.8" />
+</vector>

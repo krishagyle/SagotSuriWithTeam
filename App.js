@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
     StyleSheet,
@@ -8,15 +8,11 @@ import {
     SafeAreaView,
     ActivityIndicator,
 } from 'react-native';
-// Icon set from Expo
+import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
-// AsyncStorage for persistence
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// File System for image deletion
 import * as FileSystem from 'expo-file-system';
-// Custom Logo Component
 import Logo from './components/Logo';
-// Custom Fonts
 import {
     useFonts,
     Inter_400Regular,
@@ -24,25 +20,23 @@ import {
     Inter_600SemiBold,
     Inter_700Bold,
 } from '@expo-google-fonts/inter';
-// Screens
 import CSVFileManager from './screens/CSVFileManager';
 import ExamScanner from './screens/ExamScanner';
 import ResultsDisplay from './screens/ResultsDisplay';
 import { deleteAsync } from 'expo-file-system/legacy';
 
+// Prevent splash screen from auto-hiding
+SplashScreen.preventAutoHideAsync();
+
 export default function App() {
     // --- STATE MANAGEMENT ---
-    // Controls which tab is currently visible
     const [activeTab, setActiveTab] = useState('scan');
-    // Stores saved exam paper images
     const [savedImages, setSavedImages] = useState([]);
-    // Stores the result of the scanned paper
     const [scanResult, setScanResult] = useState(null);
-    // Track if images are loaded from storage
     const [imagesLoaded, setImagesLoaded] = useState(false);
+    const [appIsReady, setAppIsReady] = useState(false);
 
     // --- FONT LOADING ---
-    // Asynchronously load the Inter font family
     let [fontsLoaded] = useFonts({
         Inter_400Regular,
         Inter_500Medium,
@@ -50,13 +44,39 @@ export default function App() {
         Inter_700Bold,
     });
 
-    // --- PERSISTENCE FUNCTIONS ---
-    
-    // Load saved images from AsyncStorage on app start
+    // --- LOAD RESOURCES ---
     useEffect(() => {
-        loadSavedImages();
-    }, []);
+        async function prepare() {
+            try {
+                // Load saved images
+                await loadSavedImages();
+                
+                // Wait for fonts
+                while (!fontsLoaded) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                // Optional: Add minimum display time for splash
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+            } catch (e) {
+                console.warn('Error loading resources:', e);
+            } finally {
+                setAppIsReady(true);
+            }
+        }
 
+        prepare();
+    }, [fontsLoaded]);
+
+    // --- HIDE SPLASH SCREEN ---
+    const onLayoutRootView = useCallback(async () => {
+        if (appIsReady) {
+            await SplashScreen.hideAsync();
+        }
+    }, [appIsReady]);
+
+    // --- PERSISTENCE FUNCTIONS ---
     const loadSavedImages = async () => {
         try {
             const savedData = await AsyncStorage.getItem('savedImages');
@@ -74,7 +94,6 @@ export default function App() {
         }
     };
 
-    // Save to AsyncStorage whenever savedImages changes
     useEffect(() => {
         if (imagesLoaded) {
             saveSavedImages();
@@ -91,8 +110,6 @@ export default function App() {
     };
 
     // --- HANDLERS ---
-    
-    // Called when an image is saved from scanner
     const handleImageSaved = (imageData) => {
         console.log('📸 Image saved:', imageData);
         setSavedImages(prev => {
@@ -101,21 +118,15 @@ export default function App() {
             console.log('📊 Total images:', updated.length);
             return updated;
         });
-        // Switch to CSV File tab to show the saved image
         setActiveTab('csv-file');
     };
 
-    // Called when an image is deleted
     const handleDeleteImage = async (imageData) => {
         try {
             console.log('🗑️ Deleting image:', imageData.uri);
-            
-            // Delete from file system
-            // In handleDeleteImage
             await deleteAsync(imageData.uri, { idempotent: true });
             console.log('✅ Image deleted from file system');
             
-            // Update state
             setSavedImages(prev => {
                 const updated = prev.filter(img => img.uri !== imageData.uri);
                 console.log('📋 Updated savedImages after deletion. Count:', updated.length);
@@ -126,40 +137,35 @@ export default function App() {
         }
     };
 
-    // Called when scanning is finished to switch to results view
     const handleScanComplete = (result) => {
         console.log('✅ Scan complete:', result);
         setScanResult(result);
         setActiveTab('results');
     };
 
-    // --- LOADING STATE ---
-    // Show a loading spinner while fonts and images are being loaded
-    if (!fontsLoaded || !imagesLoaded) {
+    // --- SHOW SPLASH SCREEN ---
+    if (!appIsReady) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0038A8" />
-                <Text style={styles.loadingText}>
-                    {!fontsLoaded ? 'Loading fonts...' : 'Loading images...'}
+            <View style={styles.splashContainer}>
+                <Logo size={150} animated={true} />
+                <Text style={styles.splashText}>SagotSuri</Text>
+                <Text style={styles.splashSubtext}>
+                    Mabilis at awtomatikong pagsusuri
                 </Text>
             </View>
         );
     }
 
-    // --- MAIN RENDER ---
+    // --- MAIN APP RENDER ---
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Status Bar: Sets the text color of the clock/battery to white */}
+        <SafeAreaView style={styles.container} onLayout={onLayoutRootView}>
             <StatusBar style="light" />
 
-            {/* ================= HEADER SECTION ================= */}
+            {/* HEADER */}
             <View style={styles.header}>
-                {/* Logo Container with shadow */}
                 <View style={styles.logoContainer}>
                     <Logo size={42} />
                 </View>
-
-                {/* Title Text Area */}
                 <View style={styles.headerTextContainer}>
                     <Text style={styles.headerTitle}>SagotSuri</Text>
                     <Text style={styles.headerSubtitle}>
@@ -168,17 +174,14 @@ export default function App() {
                 </View>
             </View>
 
-            {/* ================= NAVIGATION TABS ================= */}
+            {/* NAVIGATION TABS */}
             <View style={styles.tabBar}>
-                {/* Tab 1: Scan */}
                 <TabButton
                     title="Scan"
                     icon="scan-outline"
                     isActive={activeTab === 'scan'}
                     onPress={() => setActiveTab('scan')}
                 />
-
-                {/* Tab 2: CSV File */}
                 <TabButton
                     title="CSV File"
                     icon="document-text-outline"
@@ -186,8 +189,6 @@ export default function App() {
                     onPress={() => setActiveTab('csv-file')}
                     badge={savedImages.length > 0 ? savedImages.length : null}
                 />
-
-                {/* Tab 3: Results */}
                 <TabButton
                     title="Results"
                     icon="stats-chart-outline"
@@ -196,35 +197,25 @@ export default function App() {
                 />
             </View>
 
-            {/* ================= MAIN CONTENT AREA ================= */}
-            {/* The content is wrapped in a Card for a premium feel */}
+            {/* MAIN CONTENT */}
             <View style={styles.contentContainer}>
                 <View style={styles.card}>
-                    {/* Scan Screen */}
                     {activeTab === 'scan' && (
                         <ExamScanner
                             onScanComplete={handleScanComplete}
                             onImageSaved={handleImageSaved}
                         />
                     )}
-
-                    {/* CSV File Manager Screen */}
                     {activeTab === 'csv-file' && (
                         <CSVFileManager
                             savedImages={savedImages}
                             onDeleteImage={handleDeleteImage}
                         />
                     )}
-
-                    {/* Results Screen */}
                     {activeTab === 'results' && (
-                        <ResultsDisplay
-                            result={scanResult}
-                        />
+                        <ResultsDisplay result={scanResult} />
                     )}
                 </View>
-
-                {/* Footer / Copyright */}
                 <Text style={styles.footerText}>© 2026 Exam Paper Scanner App</Text>
             </View>
         </SafeAreaView>
@@ -232,8 +223,6 @@ export default function App() {
 }
 
 // --- HELPER COMPONENTS ---
-
-// 1. Reusable Tab Button Component
 const TabButton = ({ title, icon, isActive, onPress, badge }) => (
     <TouchableOpacity
         onPress={onPress}
@@ -261,39 +250,42 @@ const TabButton = ({ title, icon, isActive, onPress, badge }) => (
     </TouchableOpacity>
 );
 
-
 // --- STYLESHEET ---
 const styles = StyleSheet.create({
-    // Main Container
     container: {
         flex: 1,
-        backgroundColor: '#F1F5F9', // Slate-100: A soft, modern gray background
+        backgroundColor: '#F1F5F9',
     },
-    loadingContainer: {
+    splashContainer: {
         flex: 1,
-        justifyContent: 'center',
+        backgroundColor: '#0038A8',
         alignItems: 'center',
-        backgroundColor: '#fff',
-        gap: 16,
+        justifyContent: 'center',
+        padding: 20,
     },
-    loadingText: {
+    splashText: {
+        fontSize: 32,
+        fontFamily: 'Inter_700Bold',
+        color: '#fff',
+        marginTop: 30,
+        letterSpacing: -0.5,
+    },
+    splashSubtext: {
         fontSize: 14,
-        fontFamily: 'Inter_500Medium',
-        color: '#64748B',
+        fontFamily: 'Inter_400Regular',
+        color: 'rgba(255,255,255,0.85)',
         marginTop: 8,
+        textAlign: 'center',
     },
-
-    // Header Styles
     header: {
-        backgroundColor: '#0038A8', // DepEd Blue
-        paddingTop: 8, // Minimal padding (SafeAreaView handles safe area)
+        backgroundColor: '#0038A8',
+        paddingTop: 8,
         paddingBottom: 24,
         paddingHorizontal: 24,
         marginBottom: 30,
         flexDirection: 'row',
-        alignItems: 'flex-end', // Align items to bottom of header
+        alignItems: 'flex-end',
         gap: 16,
-        // Add subtle shadow
         shadowColor: '#0038A8',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
@@ -304,7 +296,7 @@ const styles = StyleSheet.create({
     logoContainer: {
         backgroundColor: '#fff',
         borderRadius: 16,
-        padding: 2, // Border effect
+        padding: 2,
         marginBottom: 20,
     },
     headerTextContainer: {
@@ -324,17 +316,14 @@ const styles = StyleSheet.create({
         fontFamily: 'Inter_400Regular',
         lineHeight: 18,
     },
-
-    // Tab Bar Styles
     tabBar: {
         flexDirection: 'row',
         backgroundColor: '#fff',
         paddingVertical: 4,
         paddingHorizontal: 8,
         marginHorizontal: 16,
-        marginTop: -20, // Negative margin to overlap header (floating effect)
+        marginTop: -20,
         borderRadius: 12,
-        // Floating Shadow Effect
         shadowColor: '#64748B',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
@@ -352,7 +341,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     activeTab: {
-        backgroundColor: '#FEF2F2', // Very light red background for active state
+        backgroundColor: '#FEF2F2',
     },
     tabContent: {
         flexDirection: 'row',
@@ -362,11 +351,11 @@ const styles = StyleSheet.create({
     },
     tabText: {
         fontSize: 12,
-        color: '#94A3B8', // Slate-400
+        color: '#94A3B8',
         fontFamily: 'Inter_500Medium',
     },
     activeTabText: {
-        color: '#CE1126', // DepEd Red
+        color: '#CE1126',
         fontFamily: 'Inter_700Bold',
     },
     badge: {
@@ -386,20 +375,17 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontFamily: 'Inter_700Bold',
     },
-
-    // Content Area Styles
     contentContainer: {
         flex: 1,
         padding: 16,
-        paddingTop: 32, // Increased to prevent overlap with floating tab bar
+        paddingTop: 32,
     },
     card: {
         flex: 1,
         backgroundColor: '#fff',
         borderRadius: 20,
-        padding: 0, // Remove padding to let screens handle their own spacing
-        overflow: 'hidden', // Prevent content from bleeding outside rounded corners
-        // Card Shadow
+        padding: 0,
+        overflow: 'hidden',
         shadowColor: '#94A3B8',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -407,8 +393,6 @@ const styles = StyleSheet.create({
         elevation: 2,
         marginBottom: 10,
     },
-
-    // Footer
     footerText: {
         textAlign: 'center',
         color: '#94A3B8',

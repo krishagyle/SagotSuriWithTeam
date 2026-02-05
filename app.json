@@ -38,7 +38,8 @@
           "savePhotosPermission": "Allow SagotSuri to save exam papers to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
