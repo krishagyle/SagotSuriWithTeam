@@ -7,6 +7,9 @@ import {
     TouchableOpacity,
     SafeAreaView,
     ActivityIndicator,
+    TextInput,
+    Alert,
+    Image,
 } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,10 +28,18 @@ import ExamScanner from './screens/ExamScanner';
 import ResultsDisplay from './screens/ResultsDisplay';
 import { deleteAsync } from 'expo-file-system/legacy';
 
+const DepEdLogo = require('./assets/deped.png');
+
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+    // ---------- SETUP STATE ----------
+    const [isSetupDone, setIsSetupDone] = useState(false);
+    const [grade, setGrade] = useState('');
+    const [section, setSection] = useState('');
+    const [teacherName, setTeacherName] = useState('');
+
     // --- STATE MANAGEMENT ---
     const [activeTab, setActiveTab] = useState('scan');
     const [savedImages, setSavedImages] = useState([]);
@@ -39,6 +50,8 @@ export default function App() {
     const [imagesLoaded, setImagesLoaded] = useState(false);
     const [foldersLoaded, setFoldersLoaded] = useState(false);
     const [appIsReady, setAppIsReady] = useState(false);
+    const [menuVisible, setMenuVisible] = useState(false);
+
 
     // --- FONT LOADING ---
     let [fontsLoaded] = useFonts({
@@ -206,6 +219,22 @@ export default function App() {
         setActiveTab('results');
     };
 
+    const handleLogout = () => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+            { text: 'No', style: 'cancel' },
+            {
+                text: 'Yes',
+                onPress: () => {
+                    setIsSetupDone(false);
+                    setGrade('');
+                    setSection('');
+                    setTeacherName('');
+                    setActiveTab('scan');
+                },
+            },
+        ]);
+    };
+
     // --- SHOW SPLASH SCREEN ---
     if (!appIsReady) {
         return (
@@ -219,6 +248,66 @@ export default function App() {
         );
     }
 
+    // ---------- LOGIN / SETUP SCREEN ----------
+    if (!isSetupDone) {
+        return (
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#F1F5F9' }} onLayout={onLayoutRootView}>
+                <View style={styles.setupContainer}>
+                    
+                    {/* OVERSIZED LOGO - MATAAS NA POSISYON */}
+                    <View style={styles.oversizedLogoContainer}>
+                        <Image 
+                            source={DepEdLogo} 
+                            style={styles.bigLogo} 
+                            resizeMode="contain" 
+                            marginBottom={30}
+                        />
+                    </View>
+
+                    {/* FORM CARD */}
+                    <View style={styles.setupCard}>
+                        <Text style={styles.setupTitle}>Class Information</Text>
+
+                        <TextInput
+                            placeholder="Grade"
+                            placeholderTextColor="#94A3B8"
+                            style={styles.input}
+                            value={grade}
+                            onChangeText={setGrade}
+                        />
+
+                        <TextInput
+                            placeholder="Section"
+                            placeholderTextColor="#94A3B8"
+                            style={styles.input}
+                            value={section}
+                            onChangeText={setSection}
+                        />
+
+                        <TextInput
+                            placeholder="Teacher Name"
+                            placeholderTextColor="#94A3B8"
+                            style={styles.input}
+                            value={teacherName}
+                            onChangeText={setTeacherName}
+                        />
+
+                        <TouchableOpacity
+                            style={[
+                                styles.continueButton,
+                                (!grade || !section || !teacherName) && { opacity: 0.5 },
+                            ]}
+                            disabled={!grade || !section || !teacherName}
+                            onPress={() => setIsSetupDone(true)}
+                        >
+                            <Text style={styles.continueText}>Continue</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     // --- MAIN APP RENDER ---
     return (
         <SafeAreaView style={styles.container} onLayout={onLayoutRootView}>
@@ -226,16 +315,49 @@ export default function App() {
 
             {/* HEADER */}
             <View style={styles.header}>
-                <View style={styles.logoContainer}>
-                    <Logo size={42} />
+                {/* LEFT SIDE */}
+                <View style={styles.headerLeft}>
+                    <View style={styles.logoContainer}>
+                        <Logo size={40} />
+                    </View>
+                    <View>
+                        <Text style={styles.headerTitle}>SagotSuri</Text>
+                        <Text style={styles.headerSubtitle}>
+                            {teacherName} • Grade {grade} - {section}
+                        </Text>
+                    </View>
                 </View>
-                <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>SagotSuri</Text>
-                    <Text style={styles.headerSubtitle}>
-                        Mabilis at awtomatikong pagsusuri ng mga sagot
-                    </Text>
+
+                {/* RIGHT SIDE */}
+                <View style={styles.headerRight}>
+                    <TouchableOpacity
+                        style={styles.menuButton}
+                        onPress={() => setMenuVisible(prev => !prev)}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="menu" size={26} color="#fff" />
+                    </TouchableOpacity>
+
+                    {menuVisible && (
+                        <View style={styles.dropdownMenu}>
+                            <TouchableOpacity
+                                style={styles.dropdownItem}
+                                onPress={() => {
+                                    setMenuVisible(false);
+                                    handleLogout();
+                                }}
+                            >
+                                <Ionicons name="log-out-outline" size={18} color="#CE1126" />
+                                <Text style={styles.dropdownText}>Logout</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
             </View>
+
+
+            {/* LOGOUT BUTTON */}
+
 
             {/* NAVIGATION TABS */}
             <View style={styles.tabBar}>
@@ -298,7 +420,7 @@ const TabButton = ({ title, icon, isActive, onPress, badge }) => (
         <View style={styles.tabContent}>
             <Ionicons
                 name={icon}
-                size={20}
+                size={18}
                 color={isActive ? '#CE1126' : '#94A3B8'}
             />
             <Text
@@ -343,71 +465,162 @@ const styles = StyleSheet.create({
         marginTop: 8,
         textAlign: 'center',
     },
-    header: {
-        backgroundColor: '#0038A8',
-        paddingTop: 8,
-        paddingBottom: 24,
-        paddingHorizontal: 24,
-        marginBottom: 30,
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: 16,
-        shadowColor: '#0038A8',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-        zIndex: 10,
+
+    // Setup Screen Styles
+    setupContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#F1F5F9',
     },
+    oversizedLogoContainer: {
+        marginBottom: -15,
+        zIndex: 10,
+        elevation: 11, 
+    },
+    bigLogo: {
+        width: 180,
+        height: 180,
+    },
+    setupCard: {
+        width: '100%',
+        maxWidth: 380,
+        backgroundColor: '#fff',
+        borderRadius: 30,
+        padding: 24,
+        paddingTop: 45,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+    },
+    setupTitle: {
+        fontSize: 22,
+        fontFamily: 'Inter_700Bold',
+        textAlign: 'center',
+        marginBottom: 20,
+        color: '#0038A8',
+    },
+    input: {
+        backgroundColor: '#F8FAFC',
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        fontSize: 16,
+        color: '#1E293B',
+        fontFamily: 'Inter_400Regular',
+    },
+    continueButton: {
+        backgroundColor: '#CE1126',
+        padding: 16,
+        borderRadius: 12,
+        marginTop: 10,
+    },
+    continueText: {
+        color: '#fff',
+        textAlign: 'center',
+        fontFamily: 'Inter_700Bold',
+        fontSize: 16,
+    },
+
+    // Dashboard Header Styles
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 20,
+        paddingTop: 50,
+        backgroundColor: '#0038A8',
+    },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    headerRight: {
+    position: 'relative',
+    },
+
+    menuButton: {
+        padding: 6,
+    },
+
+    dropdownMenu: {
+        position: 'absolute',
+        top: 40,
+        right: 0,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        paddingVertical: 8,
+        width: 150,
+
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+    },
+
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+    },
+
+    dropdownText: {
+        fontFamily: 'Inter_600SemiBold',
+        color: '#CE1126',
+    },
+
     logoContainer: {
         backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 2,
-        marginBottom: 20,
-    },
-    headerTextContainer: {
-        flex: 1,
-        marginTop: 30,
+        padding: 4,
+        borderRadius: 10,
     },
     headerTitle: {
-        fontSize: 24,
         color: '#fff',
+        fontSize: 20,
         fontFamily: 'Inter_700Bold',
-        letterSpacing: -0.5,
     },
     headerSubtitle: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.85)',
-        marginTop: 2,
+        color: '#E5E7EB',
+        fontSize: 12,
         fontFamily: 'Inter_400Regular',
-        lineHeight: 18,
+    },
+    logoutRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 50,
+        paddingTop: 10,
+    },
+    logoutText: {
+        color: '#CE1126',
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 14,
     },
     tabBar: {
         flexDirection: 'row',
         backgroundColor: '#fff',
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        marginHorizontal: 16,
-        marginTop: -20,
-        borderRadius: 12,
-        shadowColor: '#64748B',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 4,
-        zIndex: 20,
+        margin: 16,
+        borderRadius: 15,
+        elevation: 2,
     },
     tab: {
         flex: 1,
-        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 4,
-        borderRadius: 8,
+        padding: 12,
     },
     activeTab: {
         backgroundColor: '#FEF2F2',
+        borderRadius: 15,
     },
     tabContent: {
         flexDirection: 'row',
@@ -425,16 +638,16 @@ const styles = StyleSheet.create({
         fontFamily: 'Inter_700Bold',
     },
     badge: {
+        position: 'absolute',
+        top: -8,
+        right: -12,
         backgroundColor: '#CE1126',
         borderRadius: 10,
+        paddingHorizontal: 5,
         minWidth: 18,
         height: 18,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 5,
-        position: 'absolute',
-        top: -8,
-        right: -12,
     },
     badgeText: {
         color: '#fff',
@@ -444,20 +657,13 @@ const styles = StyleSheet.create({
     contentContainer: {
         flex: 1,
         padding: 16,
-        paddingTop: 32,
+        paddingTop: 0,
     },
     card: {
         flex: 1,
         backgroundColor: '#fff',
         borderRadius: 20,
-        padding: 0,
         overflow: 'hidden',
-        shadowColor: '#94A3B8',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 2,
-        marginBottom: 10,
     },
     footerText: {
         textAlign: 'center',
