@@ -162,7 +162,7 @@ export default function ExamScanner({ answerKey, onScanComplete, onImageSaved, f
             console.log('📂 Document Directory:', documentDirectory);
             console.log('📂 Target URI:', fileUri);
             
-            // Copy image using legacy API
+            // Copy image using legacy FileSystem API
             console.log('📋 Starting file copy...');
             await copyAsync({
                 from: capturedImage,
