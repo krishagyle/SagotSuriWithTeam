@@ -8,11 +8,16 @@ import {
     Image,
     Alert,
     ActivityIndicator,
+    Modal,
+    Dimensions,
+    Platform,
+    Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { documentDirectory, writeAsStringAsync, deleteAsync } from 'expo-file-system/legacy';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
  * CSVFileManager Component
@@ -24,6 +29,8 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
     const [processingImage, setProcessingImage] = useState(null);
     const [generatedCSVs, setGeneratedCSVs] = useState({});
     const [selectedFolder, setSelectedFolder] = useState(null);
+    const [fullScreenImage, setFullScreenImage] = useState(null);
+    const [viewingCSV, setViewingCSV] = useState(null);
 
     useEffect(() => {
         console.log('CSVFileManager - savedImages updated:', savedImages);
@@ -49,6 +56,14 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
         setSelectedFolder(null);
     };
 
+    const handleImagePress = (imageData) => {
+        setFullScreenImage(imageData);
+    };
+
+    const handleCloseFullScreen = () => {
+        setFullScreenImage(null);
+    };
+
     /**
      * Convert exam paper image to CSV file
      */
@@ -66,10 +81,10 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
 
                 // Save CSV file
                 const csvFilename = imageData.filename.replace(/\.(jpg|jpeg|png)$/i, '.csv');
-                const csvUri = documentDirectory + csvFilename;
+                const csvUri = FileSystem.documentDirectory + csvFilename;
 
-                await writeAsStringAsync(csvUri, csvContent, {
-                    encoding: 'utf8',
+                await FileSystem.writeAsStringAsync(csvUri, csvContent, {
+                    encoding: FileSystem.EncodingType.UTF8,
                 });
 
                 // Store CSV info
@@ -79,6 +94,7 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
                         csvUri,
                         csvFilename,
                         timestamp: new Date().toISOString(),
+                        content: csvContent,
                     },
                 }));
 
@@ -98,22 +114,45 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
     };
 
     /**
-     * Share/Download CSV file
+     * View CSV content in the app
      */
-    const handleShareCSV = async (csvInfo) => {
+    const handleViewCSV = async (csvInfo) => {
+        try {
+            const content = await FileSystem.readAsStringAsync(csvInfo.csvUri, {
+                encoding: FileSystem.EncodingType.UTF8,
+            });
+            setViewingCSV({
+                filename: csvInfo.csvFilename,
+                content: content,
+            });
+        } catch (error) {
+            console.error('Error reading CSV:', error);
+            Alert.alert('Error', 'Failed to read CSV file.');
+        }
+    };
+
+    /**
+     * Save CSV file to phone using share dialog
+     */
+    const handleSaveToPhone = async (csvInfo) => {
         try {
             const isAvailable = await Sharing.isAvailableAsync();
-            if (isAvailable) {
-                await Sharing.shareAsync(csvInfo.csvUri, {
-                    mimeType: 'text/csv',
-                    dialogTitle: 'Download CSV File',
-                });
-            } else {
-                Alert.alert('Info', 'Sharing is not available on this device.');
+            
+            if (!isAvailable) {
+                Alert.alert('Error', 'File sharing is not available on this device.');
+                return;
             }
+
+            // Share the CSV file directly
+            await Sharing.shareAsync(csvInfo.csvUri, {
+                mimeType: 'text/csv',
+                dialogTitle: 'Save CSV File',
+                UTI: 'public.comma-separated-values-text',
+            });
+
         } catch (error) {
-            Alert.alert('Error', 'Failed to share CSV file.');
-            console.error(error);
+            console.error('Save error:', error);
+            Alert.alert('Error', 'Failed to share file. Please try again.');
         }
     };
 
@@ -134,7 +173,7 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
                             // Remove associated CSV if exists
                             if (generatedCSVs[imageData.uri]) {
                                 const { csvUri } = generatedCSVs[imageData.uri];
-                                await deleteAsync(csvUri, { idempotent: true });
+                                await FileSystem.deleteAsync(csvUri, { idempotent: true });
                                 setGeneratedCSVs(prev => {
                                     const newCSVs = { ...prev };
                                     delete newCSVs[imageData.uri];
@@ -288,7 +327,11 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
                             return (
                                 <View key={imageData.uri} style={styles.imageCard}>
                                     {/* Image Preview */}
-                                    <View style={styles.imagePreview}>
+                                    <TouchableOpacity 
+                                        style={styles.imagePreview}
+                                        onPress={() => handleImagePress(imageData)}
+                                        activeOpacity={0.9}
+                                    >
                                         <Image
                                             source={{ uri: imageData.uri }}
                                             style={styles.thumbnailImage}
@@ -298,7 +341,10 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
                                                 <ActivityIndicator size="small" color="#fff" />
                                             </View>
                                         )}
-                                    </View>
+                                        <View style={styles.zoomIndicator}>
+                                            <Ionicons name="expand-outline" size={16} color="#fff" />
+                                        </View>
+                                    </TouchableOpacity>
 
                                     {/* Image Info */}
                                     <View style={styles.imageInfo}>
@@ -323,13 +369,23 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
                                         )}
 
                                         {csvInfo && (
-                                            <TouchableOpacity
-                                                style={styles.downloadButton}
-                                                onPress={() => handleShareCSV(csvInfo)}
-                                            >
-                                                <Ionicons name="download-outline" size={16} color="#0038A8" />
-                                                <Text style={styles.downloadButtonText}>Download CSV</Text>
-                                            </TouchableOpacity>
+                                            <>
+                                                <TouchableOpacity
+                                                    style={styles.viewButton}
+                                                    onPress={() => handleViewCSV(csvInfo)}
+                                                >
+                                                    <Ionicons name="eye-outline" size={16} color="#0038A8" />
+                                                    <Text style={styles.viewButtonText}>View</Text>
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                    style={styles.saveButton}
+                                                    onPress={() => handleSaveToPhone(csvInfo)}
+                                                >
+                                                    <Ionicons name="download-outline" size={16} color="#fff" />
+                                                    <Text style={styles.saveButtonText}>Save</Text>
+                                                </TouchableOpacity>
+                                            </>
                                         )}
 
                                         <TouchableOpacity
@@ -346,6 +402,85 @@ export default function CSVFileManager({ savedImages, onDeleteImage, folders }) 
                     </View>
                 </ScrollView>
             )}
+
+            {/* Full Screen Image Modal */}
+            <Modal
+                visible={fullScreenImage !== null}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={handleCloseFullScreen}
+            >
+                <View style={styles.modalContainer}>
+                    <TouchableOpacity 
+                        style={styles.modalCloseButton}
+                        onPress={handleCloseFullScreen}
+                    >
+                        <Ionicons name="close" size={28} color="#fff" />
+                    </TouchableOpacity>
+
+                    <ScrollView
+                        contentContainerStyle={styles.modalScrollContent}
+                        maximumZoomScale={3}
+                        minimumZoomScale={1}
+                        showsHorizontalScrollIndicator={false}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {fullScreenImage && (
+                            <Image
+                                source={{ uri: fullScreenImage.uri }}
+                                style={styles.fullScreenImage}
+                                resizeMode="contain"
+                            />
+                        )}
+                    </ScrollView>
+
+                    {fullScreenImage && (
+                        <View style={styles.modalImageInfo}>
+                            <Text style={styles.modalImageFilename} numberOfLines={1}>
+                                {fullScreenImage.filename}
+                            </Text>
+                            <Text style={styles.modalImageDate}>
+                                {new Date(fullScreenImage.timestamp).toLocaleString()}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            </Modal>
+
+            {/* CSV Viewer Modal */}
+            <Modal
+                visible={viewingCSV !== null}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setViewingCSV(null)}
+            >
+                <View style={styles.csvModalContainer}>
+                    <View style={styles.csvModalHeader}>
+                        <Text style={styles.csvModalTitle}>CSV Content</Text>
+                        <TouchableOpacity 
+                            style={styles.csvCloseButton}
+                            onPress={() => setViewingCSV(null)}
+                        >
+                            <Ionicons name="close" size={24} color="#1E293B" />
+                        </TouchableOpacity>
+                    </View>
+                    
+                    {viewingCSV && (
+                        <>
+                            <Text style={styles.csvFilename}>{viewingCSV.filename}</Text>
+                            <ScrollView style={styles.csvContentScroll}>
+                                <Text style={styles.csvContent}>{viewingCSV.content}</Text>
+                            </ScrollView>
+                            
+                            <View style={styles.csvModalFooter}>
+                                <Text style={styles.csvHelpText}>
+                                    💡 Close this viewer and tap the "Save" button to save to your phone
+                                </Text>
+                            </View>
+                        </>
+                    )}
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -632,6 +767,14 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    zoomIndicator: {
+        position: 'absolute',
+        bottom: 8,
+        right: 8,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        borderRadius: 6,
+        padding: 6,
+    },
     imageInfo: {
         marginTop: 12,
         marginBottom: 12,
@@ -668,7 +811,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontFamily: 'Inter_600SemiBold',
     },
-    downloadButton: {
+    viewButton: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
@@ -680,8 +823,23 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#0038A8',
     },
-    downloadButtonText: {
+    viewButtonText: {
         color: '#0038A8',
+        fontSize: 13,
+        fontFamily: 'Inter_600SemiBold',
+    },
+    saveButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#16A34A',
+        paddingVertical: 12,
+        borderRadius: 8,
+        gap: 6,
+    },
+    saveButtonText: {
+        color: '#fff',
         fontSize: 13,
         fontFamily: 'Inter_600SemiBold',
     },
@@ -694,5 +852,110 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         borderWidth: 1,
         borderColor: '#FECACA',
+    },
+
+    // Full Screen Modal
+    modalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalCloseButton: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        zIndex: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        borderRadius: 20,
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalScrollContent: {
+        flexGrow: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fullScreenImage: {
+        width: SCREEN_WIDTH,
+        height: SCREEN_HEIGHT,
+    },
+    modalImageInfo: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: 20,
+        paddingBottom: 40,
+    },
+    modalImageFilename: {
+        fontSize: 16,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#fff',
+        marginBottom: 4,
+    },
+    modalImageDate: {
+        fontSize: 14,
+        fontFamily: 'Inter_400Regular',
+        color: '#CBD5E1',
+    },
+
+    // CSV Viewer Modal
+    csvModalContainer: {
+        flex: 1,
+        backgroundColor: '#fff',
+        marginTop: 50,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        overflow: 'hidden',
+    },
+    csvModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0',
+    },
+    csvModalTitle: {
+        fontSize: 20,
+        fontFamily: 'Inter_700Bold',
+        color: '#1E293B',
+    },
+    csvCloseButton: {
+        padding: 4,
+    },
+    csvFilename: {
+        fontSize: 14,
+        fontFamily: 'Inter_600SemiBold',
+        color: '#64748B',
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 8,
+    },
+    csvContentScroll: {
+        flex: 1,
+        paddingHorizontal: 20,
+    },
+    csvContent: {
+        fontSize: 12,
+        fontFamily: 'Courier',
+        color: '#1E293B',
+        paddingVertical: 12,
+    },
+    csvModalFooter: {
+        padding: 20,
+        backgroundColor: '#F8FAFC',
+        borderTopWidth: 1,
+        borderTopColor: '#E2E8F0',
+    },
+    csvHelpText: {
+        fontSize: 13,
+        fontFamily: 'Inter_400Regular',
+        color: '#64748B',
+        textAlign: 'center',
     },
 });
